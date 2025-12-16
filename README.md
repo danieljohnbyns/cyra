@@ -17,27 +17,61 @@ A real-time voice assistant powered by Google's Gemini AI. cyra (pronounced "Sig
 
 - Node.js 18+ and npm/yarn
 - Google Gemini API key
-- USB audio device (microphone and speaker, or configurable audio input)
+- Audio device (microphone and speaker, or configurable audio input)
+
+### System Dependencies (Linux)
+
+The audio libraries require system-level dependencies. Install them with:
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  alsa-utils \
+  libasound2-dev \
+  libsndfile1-dev \
+  build-essential \
+  python3
+```
+
+**Fedora/RHEL:**
+```bash
+sudo dnf install -y \
+  alsa-utils \
+  alsa-lib-devel \
+  libsndfile-devel \
+  gcc \
+  gcc-c++ \
+  make \
+  python3
+```
+
+**Arch:**
+```bash
+sudo pacman -S base-devel alsa-utils libsndfile
+```
 
 ## Installation
 
-1. Clone the repository:
+1. **Install system dependencies** (see Prerequisites section above)
+
+2. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/cyra.git
+git clone https://github.com/danieljohnbyns/cyra.git
 cd cyra
 ```
 
-2. Install dependencies:
+3. Install dependencies:
 ```bash
 npm install
 ```
 
-3. Add your Google API key to `.env`:
-```env
-GOOGLE_API_KEY=your_api_key_here
+4. Create and configure `.env`:
+```bash
+echo "GOOGLE_API_KEY=your_api_key_here" > .env
 ```
 
-4. Update the microphone device in `src/index.ts` if needed (currently set to `plughw:2,0`)
+5. Update the microphone device in `src/index.ts` if needed (currently set to `plughw:2,0`)
 
 ## Usage
 
@@ -151,9 +185,11 @@ Contributions are welcome! Feel free to open issues and pull requests.
 ## Troubleshooting
 
 **No audio input:**
+- Ensure system audio dependencies are installed (see Prerequisites)
 - Check microphone device setting in `src/index.ts`
 - Run `arecord -l` to list devices
 - Verify USB device is connected and recognized
+- Test with `arecord -D plughw:X,Y test.wav` (replace X,Y with your device)
 
 **No audio output:**
 - Check speaker configuration
