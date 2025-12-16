@@ -91,7 +91,8 @@ const config: Linter.Config[] = [
 			'comma-dangle': ['error', 'never'],
 			curly: ['error', 'multi'],
 			'no-trailing-spaces': 'error',
-			'custom/semicolon-after-control': 'error'
+			'custom/semicolon-after-control': 'error',
+			'func-style': ['error', 'expression']
 		}
 	}
 ];
