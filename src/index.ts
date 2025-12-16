@@ -137,21 +137,25 @@ const createSession = async () => {
 			}
 		}
 	});
+
+	// Load system prompt if it exists
+	const systemPromptPath = path.resolve(process.cwd(), 'SystemPrompt.MD');
+	try {
+		const systemPrompt = await fsp.readFile(systemPromptPath, 'utf-8');
+		session.sendRealtimeInput({
+			text: systemPrompt
+		});
+		console.log('Loaded system prompt.');
+	} catch {
+		console.log('No system prompt found, continuing without it.');
+	};
 };
 createSession();
 
 // -- Start sending microphone input to Gemini --
 // eslint-disable-next-line no-undef
 micInputStream.on('data', (data: Buffer) => {
-	if (!session) return;
-	// Debug: Show volume level
-	const volume = data.reduce((acc, val) => acc + Math.abs(val), 0) / data.length; // 0-255
-	const volumeBar = '█'.repeat(Math.min(20, Math.floor(volume / 255)));
-	process.stdout.write(
-		`\rVolume: [${volumeBar.padEnd(20)}] ${Math.round(volume)}`
-	);
-
-	if (!listening) return;
+	if (!session || !listening || !data.length) return;
 	session.sendRealtimeInput({
 		media: {
 			data: data.toString('base64'),
