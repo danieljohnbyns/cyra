@@ -103,7 +103,12 @@ const createSession = async () => {
 								.execute(functionCall.args || {})
 								.then((result) => {
 									if (!session) return;
-									console.log(`Tool ${tool.name} executed.`);
+									console.log(
+										`Tool ${tool.name} executed with parameters:`,
+										functionCall.args,
+										'Result:',
+										result
+									);
 									session.sendToolResponse({
 										functionResponses: {
 											id: functionCall.id || '',
