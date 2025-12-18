@@ -22,8 +22,8 @@ import type { CyraTool } from '../types';
 const functions: CyraTool[] = [];
 const functionsPath = path.resolve(process.cwd(), 'src', 'functions');
 
-// Conversation logging
-const conversationLog: Array<{
+// Thoughts logging
+const thoughtLog: Array<{
 	role: string;
 	content: string;
 	timestamp: string;
@@ -33,21 +33,21 @@ if (!fs.existsSync(path.join(process.cwd(), 'tmp')))
 const logFile = path.join(
 	process.cwd(),
 	'tmp',
-	`cyra_conversation_${Date.now()}.json`
+	`cyra_thought_${Date.now()}.json`
 );
 
-const saveConversation = async () => {
+const saveThoughts = async () => {
 	try {
-		await fsp.writeFile(logFile, JSON.stringify(conversationLog, null, 2));
+		await fsp.writeFile(logFile, JSON.stringify(thoughtLog, null, 2));
 	} catch (error) {
-		console.error('Error saving conversation:', error);
+		console.error('Error saving thought:', error);
 	};
 };
 
-const addToConversation = (role: string, content: string) => {
+const addToThoughts = (role: string, content: string) => {
 	const timestamp = new Date().toISOString();
-	conversationLog.push({ role, content, timestamp });
-	saveConversation();
+	thoughtLog.push({ role, content, timestamp });
+	saveThoughts();
 };
 
 const loadFunctions = async () => {
@@ -127,7 +127,7 @@ const createSession = async () => {
 				// Log AI responses
 				if (message.serverContent?.modelTurn?.parts)
 					for (const part of message.serverContent.modelTurn.parts)
-						if (part.text) addToConversation('assistant', part.text);
+						if (part.text) addToThoughts('assistant', part.text);
 
 				// Check for tool calls at the top level
 				if (message.toolCall)
@@ -215,7 +215,7 @@ process.stdin.on('keypress', (str, key) => {
 		console.log(listening ? '\nResumed listening.' : '\nPaused listening.');
 	} else if (key.name === 'q' || (key.ctrl && key.name === 'c')) {
 		console.log('\nExiting...');
-		console.log(`Conversation saved to: ${logFile}`);
+		console.log(`Thoughts saved to: ${logFile}`);
 		if (session) session.close();
 		process.exit();
 	};
