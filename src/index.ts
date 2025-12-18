@@ -133,7 +133,7 @@ const createSession = async () => {
 				if (message.toolCall)
 					for (const functionCall of message.toolCall.functionCalls || []) {
 						const tool = functions.find((f) => f.name === functionCall.name);
-						console.log(`Tool \`${tool?.name}\` executed.`);
+						console.log(`Tool \`${tool?.name}\` executed.`, functionCall.args);
 						if (tool)
 							tool
 								.execute(functionCall.args || {})
