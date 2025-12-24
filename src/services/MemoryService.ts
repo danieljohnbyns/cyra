@@ -86,4 +86,4 @@ export class MemoryService {
 	public close(): void {
 		this.db.close();
 	};
-}
+};

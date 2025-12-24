@@ -237,4 +237,4 @@ export class GeminiService {
 			.writeFile(this.logFile, JSON.stringify(this.thoughtLog, null, 2))
 			.catch((err) => console.error('Error saving thoughts:', err));
 	};
-}
+};

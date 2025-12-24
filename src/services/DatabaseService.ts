@@ -177,4 +177,4 @@ export class DatabaseService {
 
 		return merged;
 	};
-}
+};

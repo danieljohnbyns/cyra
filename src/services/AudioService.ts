@@ -56,4 +56,4 @@ export class AudioService extends EventEmitter {
 	public play(data: Buffer): void {
 		this.speaker.write(data);
 	};
-}
+};

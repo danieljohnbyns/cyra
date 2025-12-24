@@ -132,7 +132,107 @@ const customRule: any = {
 					}
 				}
 			}
-		};;
+		};
+
+		const checkClassDeclaration = (node: any) => {
+			const body = node.body;
+			// Class body is always a ClassBody with body array
+			if (body?.type === 'ClassBody' && body.body?.length >= 0) {
+				const tokens = sourceCode.getTokens(node);
+				const lastToken = tokens[tokens.length - 1];
+
+				if (lastToken && lastToken.value === '}') {
+					const nextToken = sourceCode.getTokenAfter(lastToken);
+					if (!nextToken || nextToken.value !== ';') {
+						context.report({
+							node,
+							messageId: 'missingSemicolon',
+							fix: (fixer: { insertTextAfter: (arg0: any, arg1: string) => any }) =>
+								fixer.insertTextAfter(lastToken, ';')
+						});
+					}
+				}
+			}
+		};
+
+		const checkWithStatement = (node: any) => {
+			const body = node.body;
+			if (body?.type === 'BlockStatement' && body.body?.length >= 1) {
+				const tokens = sourceCode.getTokens(node);
+				const lastToken = tokens[tokens.length - 1];
+
+				if (lastToken && lastToken.value === '}') {
+					const nextToken = sourceCode.getTokenAfter(lastToken);
+					if (!nextToken || nextToken.value !== ';') {
+						context.report({
+							node,
+							messageId: 'missingSemicolon',
+							fix: (fixer: { insertTextAfter: (arg0: any, arg1: string) => any }) =>
+								fixer.insertTextAfter(lastToken, ';')
+						});
+					}
+				}
+			}
+		};
+
+		const checkArrowFunctionExpression = (node: any) => {
+			const body = node.body;
+			// Only check if body is a BlockStatement (not expression body)
+			// AND if the arrow function is part of a variable declaration or export
+			// (not a callback argument to another function)
+			const parent = node.parent;
+			const isVariableDeclaration = parent?.type === 'VariableDeclarator';
+			const isExportDeclaration = parent?.type === 'ExportNamedDeclaration' || parent?.type === 'ExportDefaultDeclaration';
+			const isAssignment = parent?.type === 'AssignmentExpression';
+
+			// Only enforce semicolon if it's a statement-like context
+			if ((isVariableDeclaration || isExportDeclaration || isAssignment) && 
+				body?.type === 'BlockStatement' && 
+				body.body?.length >= 1) {
+				const tokens = sourceCode.getTokens(body);
+				const lastToken = tokens[tokens.length - 1];
+
+				if (lastToken && lastToken.value === '}') {
+					const nextToken = sourceCode.getTokenAfter(lastToken);
+					if (!nextToken || nextToken.value !== ';') {
+						context.report({
+							node,
+							messageId: 'missingSemicolon',
+							fix: (fixer: { insertTextAfter: (arg0: any, arg1: string) => any }) =>
+								fixer.insertTextAfter(lastToken, ';')
+						});
+					}
+				}
+			}
+		};
+
+		const checkFunctionExpression = (node: any) => {
+			const body = node.body;
+			// Similar check for function expressions - only enforce semicolon in statement contexts
+			const parent = node.parent;
+			const isVariableDeclaration = parent?.type === 'VariableDeclarator';
+			const isExportDeclaration = parent?.type === 'ExportNamedDeclaration' || parent?.type === 'ExportDefaultDeclaration';
+			const isAssignment = parent?.type === 'AssignmentExpression';
+
+			if ((isVariableDeclaration || isExportDeclaration || isAssignment) && 
+				body?.type === 'BlockStatement' && 
+				body.body?.length >= 1) {
+				const tokens = sourceCode.getTokens(body);
+				const lastToken = tokens[tokens.length - 1];
+
+				if (lastToken && lastToken.value === '}') {
+					const nextToken = sourceCode.getTokenAfter(lastToken);
+					if (!nextToken || nextToken.value !== ';') {
+						context.report({
+							node,
+							messageId: 'missingSemicolon',
+							fix: (fixer: { insertTextAfter: (arg0: any, arg1: string) => any }) =>
+								fixer.insertTextAfter(lastToken, ';')
+						});
+					}
+				}
+			}
+		};
 
 		return {
 			'IfStatement:exit': checkControlStructure,
@@ -144,7 +244,11 @@ const customRule: any = {
 			'TryStatement:exit': checkTryStatement,
 			'SwitchStatement:exit': checkControlStructure,
 			'FunctionDeclaration:exit': checkFunctionDeclaration,
-			'MethodDefinition:exit': checkMethodDefinition
+			'MethodDefinition:exit': checkMethodDefinition,
+			'ClassDeclaration:exit': checkClassDeclaration,
+			'WithStatement:exit': checkWithStatement,
+			'ArrowFunctionExpression:exit': checkArrowFunctionExpression,
+			'FunctionExpression:exit': checkFunctionExpression
 		};
 	}
 };

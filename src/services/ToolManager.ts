@@ -80,4 +80,4 @@ export class ToolManager {
 	public stopWatching(): void {
 		if (this.watcher) this.watcher.close();
 	};
-}
+};
