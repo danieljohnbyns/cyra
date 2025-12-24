@@ -33,9 +33,10 @@ const tool: CyraTool = {
 		}
 	},
 	execute: async (args) => {
-		const operation = args?.operation?.toLowerCase();
-		const filePath = args?.file_path;
-		const content = args?.content;
+		const operation =
+			typeof args?.operation === 'string' ? args.operation.toLowerCase() : null;
+		const filePath = typeof args?.file_path === 'string' ? args.file_path : null;
+		const content = typeof args?.content === 'string' ? args.content : undefined;
 
 		if (!filePath) return { error: 'No file_path argument provided.' };
 		if (!operation)

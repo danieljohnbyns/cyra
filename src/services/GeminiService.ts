@@ -1,9 +1,16 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-undef */
-/* eslint-disable @typescript-eslint/explicit-module-boundary-types */
-import { GoogleGenAI, Modality, Session } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
+import type {
+	Session,
+	LiveServerMessage,
+	LiveServerToolCall
+} from '@google/genai';
 import { config } from '../config.ts';
 import { ToolManager } from './ToolManager.ts';
+import type {
+	ConversationEntry,
+	AudioDataCallback
+} from '../../types/gemini.d.ts';
 import * as path from 'path';
 import * as fsp from 'fs/promises';
 import * as fs from 'fs';
@@ -12,11 +19,7 @@ export class GeminiService {
 	private client: GoogleGenAI;
 	private session: Session | null = null;
 	private toolManager: ToolManager;
-	private thoughtLog: Array<{
-		role: string;
-		content: string;
-		timestamp: string;
-	}> = [];
+	private thoughtLog: ConversationEntry[] = [];
 	private logFile: string;
 
 	constructor(toolManager: ToolManager) {
@@ -35,7 +38,7 @@ export class GeminiService {
 		);
 	}
 
-	public async connect(onAudioData: (data: Buffer) => void) {
+	public async connect(onAudioData: AudioDataCallback): Promise<void> {
 		if (this.session) await this.disconnect();
 
 		this.session = await this.client.live.connect({
@@ -48,29 +51,33 @@ export class GeminiService {
 				onopen: () => {
 					console.log('Gemini session connected.');
 				},
-				onmessage: async (message) => {
-					this.handleMessage(message, onAudioData);
+				onmessage: (message: LiveServerMessage) => {
+					this.handleMessage(message, onAudioData).catch((err) =>
+						console.error('Error handling message:', err)
+					);
 				},
-				onerror: (err) => {
-					console.error('Gemini session error:', err);
+				onerror: (err: ErrorEvent | Error) => {
+					if (err instanceof Error) {
+						console.error('Gemini session error:', err.message);
+					} else {
+						console.error('Gemini session error:', err);
+					}
 				},
-				onclose: (e) => {
-					console.log('Gemini session closed.', e);
-				}
+				onclose: (e: CloseEvent) => console.log('Gemini session closed.', e)
 			}
 		});
 
 		await this.sendSystemPrompt();
 	}
 
-	public async disconnect() {
+	public async disconnect(): Promise<void> {
 		if (this.session) {
 			this.session.close();
 			this.session = null;
 		}
 	}
 
-	public sendAudio(data: Buffer) {
+	public sendAudio(data: Buffer): void {
 		if (!this.session) return;
 		this.session.sendRealtimeInput({
 			media: {
@@ -81,42 +88,60 @@ export class GeminiService {
 	}
 
 	private async handleMessage(
-		message: any,
-		onAudioData: (data: Buffer) => void
-	) {
+		message: LiveServerMessage,
+		onAudioData: AudioDataCallback
+	): Promise<void> {
 		// Log thoughts
-		if (message.serverContent?.modelTurn?.parts)
-			for (const part of message.serverContent.modelTurn.parts)
-				if (part.text) this.logThought('assistant', part.text);
+		if (message.serverContent?.modelTurn?.parts) {
+			for (const part of message.serverContent.modelTurn.parts) {
+				if (part.text) {
+					this.logThought('assistant', part.text);
+				}
+			}
+		}
 
 		// Handle Tool Calls
-		if (message.toolCall) await this.handleToolCalls(message.toolCall);
+		if (message.toolCall) {
+			await this.handleToolCalls(message.toolCall);
+		}
 
 		// Handle Audio Output
-		if (message.serverContent?.modelTurn?.parts)
-			for (const part of message.serverContent.modelTurn.parts)
+		if (message.serverContent?.modelTurn?.parts) {
+			for (const part of message.serverContent.modelTurn.parts) {
 				if (
-					part.inlineData?.mimeType.startsWith('audio/pcm') &&
+					part.inlineData?.mimeType &&
+					part.inlineData.mimeType.startsWith('audio/pcm') &&
 					part.inlineData.data
 				) {
 					const audioBuffer = Buffer.from(part.inlineData.data, 'base64');
 					onAudioData(audioBuffer);
 				}
+			}
+		}
 	}
 
-	private async handleToolCalls(toolCall: any) {
+	private async handleToolCalls(toolCall: LiveServerToolCall): Promise<void> {
 		for (const functionCall of toolCall.functionCalls || []) {
-			const tool = this.toolManager.getTool(functionCall.name);
-			console.log(`Tool \`${functionCall.name}\` executed.`);
+			const toolName = functionCall.name;
+			if (!toolName) {
+				console.error('Tool call without a name received.');
+				continue;
+			}
+
+			const tool = this.toolManager.getTool(toolName);
+			console.log(`Tool \`${toolName}\` executed.`);
 
 			if (!tool) {
-				console.error(`Tool ${functionCall.name} not found.`);
+				console.error(`Tool ${toolName} not found.`);
 				continue;
 			}
 			try {
 				const result = await tool.execute(functionCall.args || {});
-				if ('error' in result) console.error(result.error);
-				else console.log(result.output);
+				if ('error' in result) {
+					console.error(result.error);
+				} else {
+					console.log(result.output);
+				}
 
 				this.session?.sendToolResponse({
 					functionResponses: {
@@ -131,7 +156,7 @@ export class GeminiService {
 		}
 	}
 
-	private async sendSystemPrompt() {
+	private async sendSystemPrompt(): Promise<void> {
 		if (!this.session) return;
 		const systemPromptPath = path.resolve(process.cwd(), 'SystemPrompt.md');
 		try {
@@ -164,9 +189,9 @@ export class GeminiService {
 		}
 	}
 
-	private logThought(role: string, content: string) {
+	private logThought(role: ConversationEntry['role'], content: string): void {
 		const timestamp = new Date().toISOString();
-		const entry = { role, content, timestamp };
+		const entry: ConversationEntry = { role, content, timestamp };
 		this.thoughtLog.push(entry);
 
 		fsp

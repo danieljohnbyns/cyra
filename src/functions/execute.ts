@@ -32,8 +32,8 @@ const tool: CyraTool = {
 		}
 	},
 	execute: async (args) => {
-		const directory = args?.directory || '.';
-		const command = args?.command;
+		const directory = typeof args?.directory === 'string' ? args.directory : '.';
+		const command = typeof args?.command === 'string' ? args.command : null;
 
 		if (!command) return { error: 'No command argument provided.' };
 
