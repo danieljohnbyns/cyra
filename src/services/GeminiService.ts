@@ -7,6 +7,7 @@ import type {
 } from '@google/genai';
 import { config } from '../config.ts';
 import { ToolManager } from './ToolManager.ts';
+import { MemoryService } from './MemoryService.ts';
 import type {
 	ConversationEntry,
 	AudioDataCallback
@@ -19,12 +20,14 @@ export class GeminiService {
 	private client: GoogleGenAI;
 	private session: Session | null = null;
 	private toolManager: ToolManager;
+	private memoryService: MemoryService;
 	private thoughtLog: ConversationEntry[] = [];
 	private logFile: string;
 
 	constructor(toolManager: ToolManager) {
 		this.client = new GoogleGenAI({ apiKey: config.google.apiKey });
 		this.toolManager = toolManager;
+		this.memoryService = new MemoryService();
 
 		if (!fs.existsSync(path.resolve(process.cwd(), config.system.tmpDir)))
 			fs.mkdirSync(path.resolve(process.cwd(), config.system.tmpDir), {
@@ -38,6 +41,10 @@ export class GeminiService {
 		);
 	}
 
+	public getMemoryService(): MemoryService {
+		return this.memoryService;
+	}
+
 	public async connect(onAudioData: AudioDataCallback): Promise<void> {
 		if (this.session) await this.disconnect();
 
@@ -45,6 +52,8 @@ export class GeminiService {
 			model: config.google.model,
 			config: {
 				responseModalities: [Modality.AUDIO],
+				inputAudioTranscription: {},
+				outputAudioTranscription: {},
 				tools: [{ functionDeclarations: this.toolManager.getTools() }]
 			},
 			callbacks: {
@@ -75,6 +84,7 @@ export class GeminiService {
 			this.session.close();
 			this.session = null;
 		}
+		this.memoryService.close();
 	}
 
 	public sendAudio(data: Buffer): void {
@@ -91,11 +101,38 @@ export class GeminiService {
 		message: LiveServerMessage,
 		onAudioData: AudioDataCallback
 	): Promise<void> {
-		// Log thoughts
+		// Handle input transcription (user audio)
+		if (
+			message.serverContent &&
+			'inputTranscription' in message.serverContent &&
+			message.serverContent.inputTranscription
+		) {
+			const transcript = (message.serverContent.inputTranscription as any).text;
+			if (transcript) {
+				this.memoryService.addUserMessage(transcript);
+				console.log(`User: ${transcript}`);
+			}
+		}
+
+		// Handle output transcription (assistant audio)
+		if (
+			message.serverContent &&
+			'outputTranscription' in message.serverContent &&
+			message.serverContent.outputTranscription
+		) {
+			const transcript = (message.serverContent.outputTranscription as any).text;
+			if (transcript) {
+				this.memoryService.addAssistantMessage(transcript);
+				console.log(`Assistant: ${transcript}`);
+			}
+		}
+
+		// Log thoughts and store them in memory
 		if (message.serverContent?.modelTurn?.parts) {
 			for (const part of message.serverContent.modelTurn.parts) {
 				if (part.text) {
 					this.logThought('assistant', part.text);
+					this.memoryService.addThought(part.text);
 				}
 			}
 		}
@@ -105,9 +142,9 @@ export class GeminiService {
 			await this.handleToolCalls(message.toolCall);
 		}
 
-		// Handle Audio Output
+		// Handle Audio Output (play audio)
 		if (message.serverContent?.modelTurn?.parts) {
-			for (const part of message.serverContent.modelTurn.parts) {
+			for (const part of message.serverContent.modelTurn?.parts) {
 				if (
 					part.inlineData?.mimeType &&
 					part.inlineData.mimeType.startsWith('audio/pcm') &&
@@ -178,12 +215,28 @@ export class GeminiService {
 				if ('output' in res) cliTools = res.output;
 			}
 
-			const populatedPrompt = systemPrompt
+			// Get conversation history
+			const conversationHistory = this.memoryService.formatHistoryForContext();
+
+			let populatedPrompt = systemPrompt
 				.replace('{{repository_structure}}', repoStructure)
 				.replace('{{cli_tools}}', cliTools);
 
+			// Append conversation history if there is any
+			if (conversationHistory) {
+				populatedPrompt += '\n\n' + conversationHistory;
+			}
+
 			this.session.sendRealtimeInput({ text: populatedPrompt });
 			console.log('System prompt sent.');
+
+			// Log conversation stats
+			const stats = this.memoryService.getStats();
+			if (stats.totalMessages > 0) {
+				console.log(
+					`Loaded conversation: ${stats.userMessages} user messages, ${stats.assistantMessages} assistant messages, ${stats.thoughts} thoughts`
+				);
+			}
 		} catch {
 			console.log('No system prompt found or error loading it.');
 		}

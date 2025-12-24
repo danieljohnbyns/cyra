@@ -2,7 +2,7 @@
  * Recorded thought/message in conversation log
  */
 export interface ConversationEntry {
-	role: 'user' | 'assistant' | 'system';
+	role: 'user' | 'assistant' | 'system' | 'thought';
 	content: string;
 	timestamp: string;
 }
