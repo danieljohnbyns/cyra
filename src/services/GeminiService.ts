@@ -47,9 +47,19 @@ export class GeminiService {
 	public async connect(onAudioData: AudioDataCallback): Promise<void> {
 		if (this.session) await this.disconnect();
 
+		// Build system instruction with dynamic context
+		const systemInstructionText = await this.buildSystemInstruction();
+
 		this.session = await this.client.live.connect({
 			model: config.google.model,
 			config: {
+				systemInstruction: {
+					parts: [
+						{
+							text: systemInstructionText
+						}
+					]
+				},
 				responseModalities: [Modality.AUDIO],
 				inputAudioTranscription: {},
 				outputAudioTranscription: {},
@@ -73,7 +83,15 @@ export class GeminiService {
 			}
 		});
 
-		await this.sendSystemPrompt();
+		// Log conversation stats
+		const stats = this.memoryService.getStats();
+		if (stats.totalMessages > 0)
+			console.log(
+				`Loaded conversation: ${stats.userMessages} user messages, ${stats.assistantMessages} assistant messages, ${stats.thoughts} thoughts`
+			);
+		this.session.sendRealtimeInput({
+			text: 'summarize your environment'
+		});
 	};
 
 	public async disconnect(): Promise<void> {
@@ -181,50 +199,45 @@ export class GeminiService {
 		};
 	};
 
-	private async sendSystemPrompt(): Promise<void> {
-		if (!this.session) return;
+	private async buildSystemInstruction(): Promise<string> {
 		const systemPromptPath = path.resolve(process.cwd(), 'SystemPrompt.md');
+		let basePrompt = 'You are Cyra, an advanced AI assistant designed to help developers.';
+
 		try {
-			const systemPrompt = await fsp.readFile(systemPromptPath, 'utf-8');
-
-			// Dynamic context injection
-			const readRepo = this.toolManager.getTool('read_repository');
-			const inspectEnv = this.toolManager.getTool('inspect_environment');
-
-			let repoStructure = 'Not available';
-			let cliTools = 'Not available';
-
-			if (readRepo) {
-				const res = await readRepo.execute({});
-				if ('output' in res) repoStructure = res.output;
-			};
-			if (inspectEnv) {
-				const res = await inspectEnv.execute({});
-				if ('output' in res) cliTools = res.output;
-			};
-
-			// Get conversation history
-			const conversationHistory = this.memoryService.formatHistoryForContext();
-
-			let populatedPrompt = systemPrompt
-				.replace('{{repository_structure}}', repoStructure)
-				.replace('{{cli_tools}}', cliTools);
-
-			// Append conversation history if there is any
-			if (conversationHistory) populatedPrompt += '\n\n' + conversationHistory;
-
-			this.session.sendRealtimeInput({ text: populatedPrompt });
-			console.log('System prompt sent.');
-
-			// Log conversation stats
-			const stats = this.memoryService.getStats();
-			if (stats.totalMessages > 0)
-				console.log(
-					`Loaded conversation: ${stats.userMessages} user messages, ${stats.assistantMessages} assistant messages, ${stats.thoughts} thoughts`
-				);
+			basePrompt = await fsp.readFile(systemPromptPath, 'utf-8');
 		} catch {
-			console.log('No system prompt found or error loading it.');
+			console.log('No SystemPrompt.md found, using default prompt.');
 		};
+
+		// Dynamic context injection
+		const readRepo = this.toolManager.getTool('read_repository');
+		const inspectEnv = this.toolManager.getTool('inspect_environment');
+
+		let repoStructure = 'Not available';
+		let cliTools = 'Not available';
+
+		if (readRepo) {
+			const res = await readRepo.execute({});
+			if ('output' in res) repoStructure = res.output;
+		};
+		if (inspectEnv) {
+			const res = await inspectEnv.execute({});
+			if ('output' in res) cliTools = res.output;
+		};
+
+		// Get conversation history
+		const conversationHistory = this.memoryService.formatHistoryForContext();
+
+		// Build the complete system instruction
+		let systemInstruction = basePrompt
+			.replace('{{repository_structure}}', repoStructure)
+			.replace('{{cli_tools}}', cliTools);
+
+		// Append conversation history if there is any
+		if (conversationHistory)
+			systemInstruction += '\n\n' + conversationHistory;
+
+		return systemInstruction;
 	};
 
 	private logThought(role: ConversationEntry['role'], content: string): void {
