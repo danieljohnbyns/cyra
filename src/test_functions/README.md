@@ -34,12 +34,13 @@ The `src/functions/` directory is actively watched and hot-reloaded by the tool 
 
 ## Before You Start
 
-**IMPORTANT**: Always read existing production functions first! They are your reference guide for:
-- Exact TypeScript syntax for the CyraTool interface
-- How to properly define parameters with descriptions
-- The expected `execute()` method signature
-- Error handling and return patterns
-- Code formatting and style
+**IMPORTANT**: Always read existing production functions first! They are your reference guide.
+
+**Use the Template**:
+A template file is provided at `src/test_functions/_template.ts`. You can copy this file to start your new function:
+```bash
+cp src/test_functions/_template.ts src/test_functions/my_new_function.ts
+```
 
 Pick a function similar to what you're building and study it thoroughly - it will serve as your template.
 
@@ -55,20 +56,23 @@ Functions here follow the exact same pattern as those in `src/functions/`:
 
 If creating a new `process_data.ts` function:
 
-1. **Read examples first**:
+1. **Start with template**:
+   - Copy `_template.ts` to `process_data.ts`
+   
+2. **Read examples**:
    - Read `/src/functions/execute.ts` to see a basic tool
    - Read `/src/functions/file_operations.ts` to see a more complex one
    - Study the patterns, syntax, and structure
 
-2. **Create in test**:
-   - Create `/src/test_functions/process_data.ts` 
+3. **Implement in test**:
+   - Modify `/src/test_functions/process_data.ts` 
    - Follow the patterns you learned exactly
    
-3. **Test**:
+4. **Test**:
    - Run `npx tsc --noEmit` to verify it compiles
    - Test all code paths work correctly
    
-4. **Move to production**:
+5. **Move to production**:
    - Move to `/src/functions/process_data.ts`
    - The tool manager's hot-reload automatically loads it
    - Function is now available and ready to use

@@ -143,7 +143,8 @@ export class GeminiService {
 			this.session.close();
 			this.session = null;
 		};
-		this.memoryService.close();
+		// Do not close memory service here as it might be needed for reconnection
+		// this.memoryService.close();
 
 		// Clear session state on successful disconnect
 		await this.clearSessionState();
@@ -202,7 +203,7 @@ export class GeminiService {
 			const previousNotes = await this.loadPreviousSessionNotes();
 
 			// Build the introduction prompt
-			let introPrompt = 'Please introduce yourself briefly and remind me what we were working on.';
+			let introPrompt = 'Please introduce yourself briefly.';
 
 			if (previousNotes)
 				introPrompt += ` Here are notes from our last session:\n\n${previousNotes}`;
