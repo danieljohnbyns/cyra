@@ -131,6 +131,11 @@ export class GeminiService {
 			console.log(
 				`Loaded conversation: ${stats.userMessages} user messages, ${stats.assistantMessages} assistant messages, ${stats.thoughts} thoughts`
 			);
+
+		// Send introduction prompt to AI after connection is established
+		setTimeout(() => {
+			this.sendIntroductionPrompt();
+		}, 500);
 	};
 
 	public async disconnect(): Promise<void> {
@@ -182,6 +187,83 @@ export class GeminiService {
 			this.session.sendRealtimeInput({ text: contextMessage });
 		} catch (error) {
 			console.error('Error injecting semantic context:', error);
+		};
+	};
+
+	/**
+	 * Send introduction prompt to AI when session starts
+	 * Prompts AI to introduce itself and optionally read previous session notes
+	 */
+	private async sendIntroductionPrompt(): Promise<void> {
+		if (!this.session) return;
+
+		try {
+			// Check if there are previous session notes
+			const previousNotes = await this.loadPreviousSessionNotes();
+
+			// Build the introduction prompt
+			let introPrompt = 'Please introduce yourself briefly and remind me what we were working on.';
+
+			if (previousNotes)
+				introPrompt += ` Here are notes from our last session:\n\n${previousNotes}`;
+
+			// Send the introduction request as text
+			this.session.sendRealtimeInput({
+				text: introPrompt
+			});
+
+			console.log('Introduction prompt sent to AI.');
+		} catch (error) {
+			console.error('Error sending introduction prompt:', error);
+		};
+	};
+
+	/**
+	 * Load notes from the most recent previous session
+	 */
+	private async loadPreviousSessionNotes(): Promise<string | null> {
+		try {
+			const tmpDir = path.resolve(process.cwd(), config.system.tmpDir);
+
+			// Get all thought log files
+			const files = await fsp.readdir(tmpDir);
+			const thoughtFiles = files
+				.filter(
+					(f) =>
+						f.startsWith('cyra_thought_') && f.endsWith('.json') && f !== path.basename(this.logFile)
+				)
+				.sort()
+				.reverse();
+
+			if (thoughtFiles.length === 0) return null;
+
+			// Read the most recent thought log
+			const latestFile = path.join(tmpDir, thoughtFiles[0]);
+			const content = await fsp.readFile(latestFile, 'utf-8');
+			const thoughtLog = JSON.parse(content);
+
+			// Extract key points from the thought log
+			if (Array.isArray(thoughtLog) && thoughtLog.length > 0) {
+				// Get last 5 entries as summary
+				const recentEntries = thoughtLog.slice(-5);
+				const summary = recentEntries
+					.map((entry: ConversationEntry) => {
+						if (entry.role === 'user') return `User: ${entry.content.substring(0, 100)}...`;
+						if (entry.role === 'assistant') return `You: ${entry.content.substring(0, 100)}...`;
+						if (entry.role === 'thought')
+							return `Internal thought: ${entry.content.substring(0, 80)}...`;
+						return null;
+					})
+					.filter((s) => s !== null)
+					.join('\n');
+
+				return summary || null;
+			};
+
+			return null;
+		} catch (error) {
+			console.error('Error loading previous session notes:', error);
+			return null;
 		};
 	};
 
