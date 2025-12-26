@@ -35,23 +35,17 @@ const tool: CyraTool = {
 		const directory = typeof args?.directory === 'string' ? args.directory : '.';
 		const command = typeof args?.command === 'string' ? args.command : null;
 
-		if (!command) return { error: 'No command argument provided.' };
+		if (!command) throw new Error('No command argument provided.');
 
 		const resolvedPath = path.resolve(process.cwd(), directory);
 
-		try {
-			// Execute the command asynchronously in a subprocess
-			const { stdout, stderr } = await execAsync(command, {
-				cwd: resolvedPath,
-				maxBuffer: 1024 * 1024 * 10 // 10MB buffer
-			});
+		// Execute the command asynchronously in a subprocess
+		const { stdout, stderr } = await execAsync(command, {
+			cwd: resolvedPath,
+			maxBuffer: 1024 * 1024 * 10 // 10MB buffer
+		});
 
-			const output = stdout.trim() || stderr.trim();
-			return { output };
-		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : String(error);
-			return { error: `Failed to execute command: ${errorMessage}` };
-		};
+		return stdout.trim() || stderr.trim();
 	}
 };
 

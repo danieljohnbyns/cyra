@@ -30,7 +30,7 @@ const tool: CyraTool = {
 		const { command, description } = args || {};
 
 		if (!command || typeof command !== 'string')
-			return { error: 'Command is required and must be a string' };
+			throw new Error('Command is required and must be a string');
 
 		const jobId = uuidv4().slice(0, 8);
 		const jobQueue = JobQueue.getInstance();
@@ -43,23 +43,17 @@ const tool: CyraTool = {
 				const { promisify } = await import('util');
 				const execAsync = promisify(exec);
 
-				try {
-					jobQueue.updateProgress(jobId, 10, 'Executing command...');
+				jobQueue.updateProgress(jobId, 10, 'Executing command...');
 
-					const { stdout, stderr } = await execAsync(command as string);
+				const { stdout, stderr } = await execAsync(command as string);
 
-					jobQueue.updateProgress(jobId, 90, 'Processing output...');
+				jobQueue.updateProgress(jobId, 90, 'Processing output...');
 
-					return {
-						success: true,
-						stdout: stdout || '',
-						stderr: stderr || '',
-						description: description || 'Command executed'
-					};
-				} catch (err) {
-					throw new Error(
-						`Command failed: ${err instanceof Error ? err.message : String(err)}`
-					);
+				return {
+					success: true,
+					stdout: stdout || '',
+					stderr: stderr || '',
+					description: description || 'Command executed'
 				};
 			}
 		};
@@ -67,15 +61,13 @@ const tool: CyraTool = {
 		// Submit the job - returns immediately
 		await jobQueue.submitJob(job);
 
-		return {
-			output: JSON.stringify({
-				jobId,
-				message: `Job submitted: ${description || command}`,
-				status: 'queued',
-				userMessage:
-					'Your command is executing in the background. I will notify you when it completes or if there are any issues.'
-			})
-		};
+		return JSON.stringify({
+			jobId,
+			message: `Job submitted: ${description || command}`,
+			status: 'queued',
+			userMessage:
+				'Your command is executing in the background. I will notify you when it completes or if there are any issues.'
+		});
 	}
 };
 

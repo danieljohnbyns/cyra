@@ -16,7 +16,7 @@ import type {
 import type { CyraTool } from '../../types/index.d.ts';
 import { withRetry } from '../utils/withRetry.ts';
 import { withTimeout } from '../utils/withTimeout.ts';
-import { classifyError, formatErrorForUser } from '../utils/errorRecovery.ts';
+import { formatErrorForUser } from '../utils/errorRecovery.ts';
 import * as path from 'path';
 import * as fsp from 'fs/promises';
 import * as fs from 'fs';
@@ -270,42 +270,26 @@ export class GeminiService {
 			};
 
 			try {
-				// Determine if tool is required (default: true)
-				const isRequired = tool.required !== false;
-
 				// Execute tool with retry and timeout
-				const result = await this.executeToolWithResilience(
+				const output = await this.executeToolWithResilience(
 					tool,
 					functionCall.args || {},
-					isRequired
+					tool.required !== false
 				);
 
-				if ('error' in result) {
-					console.error(`Tool ${toolName} failed:`, result.error);
-					if (!isRequired) {
-						// Optional tool failed, provide user-friendly error
-						const { message } = formatErrorForUser(
-							new Error(result.error),
-							toolName,
-							isRequired
-						);
-						this.session?.sendRealtimeInput({ text: message });
-					};
-				} else {
-					console.log(`Tool ${toolName} output:`, result.output);
-				};
+				console.log(`Tool ${toolName} output:`, output);
 
 				this.session?.sendToolResponse({
 					functionResponses: {
 						id: functionCall.id || '',
 						name: toolName,
-						response: result
+						response: { output } as Record<string, unknown>
 					}
 				});
 			} catch (err) {
 				console.error(`Error executing tool ${toolName}:`, err);
 				const isRequired = tool.required !== false;
-				const { message, shouldContinue } = formatErrorForUser(
+				const { message: formattedMessage, shouldContinue } = formatErrorForUser(
 					err,
 					toolName,
 					isRequired
@@ -314,9 +298,9 @@ export class GeminiService {
 				// Notify user of error
 				if (!shouldContinue)
 					this.session?.sendRealtimeInput({
-						text: `Critical error: ${message}`
+						text: `Critical error: ${formattedMessage}`
 					});
-				else this.session?.sendRealtimeInput({ text: message });
+				else this.session?.sendRealtimeInput({ text: formattedMessage });
 
 				// Send error response to Gemini
 				this.session?.sendToolResponse({
@@ -324,8 +308,8 @@ export class GeminiService {
 						id: functionCall.id || '',
 						name: toolName,
 						response: {
-							error: message
-						}
+							error: formattedMessage
+						} as Record<string, unknown>
 					}
 				});
 			};
@@ -339,37 +323,17 @@ export class GeminiService {
 		tool: CyraTool,
 		args: Record<string, unknown>,
 		_isRequired: boolean
-	): Promise<{ output: string } | { error: string }> {
+	): Promise<string> {
 		const toolName = tool.name || 'unknown';
 		const timeoutMs =
 			tool.timeoutMs || config.errorHandling.timeout.defaultTimeoutMs;
 
-		try {
-			// Wrap execution with retry logic
-			const result = await withRetry(
-				() => withTimeout(tool.execute(args), timeoutMs, `Tool ${toolName}`),
-				config.errorHandling.retry,
-				`Tool ${toolName}`
-			);
-
-			return result;
-		} catch (error) {
-			const errorType = classifyError(error);
-			const message = error instanceof Error ? error.message : String(error);
-
-			// Log error details
-			console.error(
-				`[${errorType.toUpperCase()}] Tool ${toolName} failed:`,
-				message
-			);
-
-			// Store error in memory for context
-			this.memoryService.addThought(
-				`Tool execution failed: ${toolName} - ${errorType} - ${message}`
-			);
-
-			return { error: message };
-		};
+		// Wrap execution with retry logic
+		return await withRetry(
+			() => withTimeout(tool.execute(args), timeoutMs, `Tool ${toolName}`),
+			config.errorHandling.retry,
+			`Tool ${toolName}`
+		);
 	};
 
 	private async buildSystemInstruction(): Promise<string> {
@@ -391,12 +355,18 @@ export class GeminiService {
 		let cliTools = 'Not available';
 
 		if (readRepo) {
-			const res = await readRepo.execute({});
-			if ('output' in res) repoStructure = res.output;
+			try {
+				repoStructure = await readRepo.execute({});
+			} catch (err) {
+				console.error('Failed to read repository structure:', err);
+			};
 		};
 		if (inspectEnv) {
-			const res = await inspectEnv.execute({});
-			if ('output' in res) cliTools = res.output;
+			try {
+				cliTools = await inspectEnv.execute({});
+			} catch (err) {
+				console.error('Failed to inspect environment:', err);
+			};
 		};
 
 		// Get conversation history

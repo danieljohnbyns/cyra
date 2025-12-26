@@ -73,7 +73,7 @@ const tool: CyraTool = {
 			};
 		};
 
-		return { output: JSON.stringify(files, null, 2) };
+		return JSON.stringify(files, null, 2);
 	}
 };
 

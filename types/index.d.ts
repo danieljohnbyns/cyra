@@ -7,11 +7,9 @@ import type { FunctionDeclaration } from '@google/genai';
 export interface CyraTool extends FunctionDeclaration {
 	/**
 	 * Execute the tool with provided arguments
-	 * Returns either output or error
+	 * Returns a string on success, throws an error on failure
 	 */
-	execute: (
-		args?: Record<string, unknown>
-	) => Promise<{ output: string } | { error: string }>;
+	execute: (args?: Record<string, unknown>) => Promise<string>;
 
 	/**
 	 * Whether this tool is required for core functionality

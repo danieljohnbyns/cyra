@@ -38,12 +38,11 @@ const tool: CyraTool = {
 		const filePath = typeof args?.file_path === 'string' ? args.file_path : null;
 		const content = typeof args?.content === 'string' ? args.content : undefined;
 
-		if (!filePath) return { error: 'No file_path argument provided.' };
+		if (!filePath) throw new Error('No file_path argument provided.');
 		if (!operation)
-			return {
-				error:
-					'No operation argument provided. Use "create", "read", "update", or "delete".'
-			};
+			throw new Error(
+				'No operation argument provided. Use "create", "read", "update", or "delete".'
+			);
 
 		const resolvedPath = path.resolve(process.cwd(), filePath);
 
@@ -51,45 +50,45 @@ const tool: CyraTool = {
 			switch (operation) {
 			case 'create': {
 				if (content === undefined)
-					return { error: 'No content argument provided for create operation.' };
+					throw new Error('No content argument provided for create operation.');
 				const dirPath = path.dirname(resolvedPath);
 				await fs.mkdir(dirPath, { recursive: true });
 				await fs.writeFile(resolvedPath, content, 'utf-8');
-				return { output: `File created successfully at ${filePath}` };
+				return `File created successfully at ${filePath}`;
 			}
 
 			case 'read': {
 				const fileContent = await fs.readFile(resolvedPath, 'utf-8');
-				return { output: fileContent };
+				return fileContent;
 			}
 
 			case 'update': {
 				if (content === undefined)
-					return { error: 'No content argument provided for update operation.' };
+					throw new Error('No content argument provided for update operation.');
 				await fs.access(resolvedPath);
 				await fs.writeFile(resolvedPath, content, 'utf-8');
-				return { output: `File updated successfully at ${filePath}` };
+				return `File updated successfully at ${filePath}`;
 			}
 
 			case 'delete': {
 				await fs.access(resolvedPath);
 				await fs.unlink(resolvedPath);
-				return { output: `File deleted successfully at ${filePath}` };
+				return `File deleted successfully at ${filePath}`;
 			}
 
 			default:
-				return {
-					error: `Unknown operation: ${operation}. Use "create", "read", "update", or "delete".`
-				};
+				throw new Error(
+					`Unknown operation: ${operation}. Use "create", "read", "update", or "delete".`
+				);
 			}
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code === 'ENOENT')
-				return {
-					error: `Error performing ${operation} operation at ${filePath}: File not found.`
-				};
-			return {
-				error: `Error performing ${operation} operation at ${filePath}: ${(err as Error).message}`
-			};
+				throw new Error(
+					`Error performing ${operation} operation at ${filePath}: File not found.`
+				);
+			throw new Error(
+				`Error performing ${operation} operation at ${filePath}: ${(err as Error).message}`
+			);
 		};
 	}
 };
