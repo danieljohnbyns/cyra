@@ -7,6 +7,11 @@ export default class GeminiLiveClient extends EventEmitter {
 	private client: GoogleGenAI;
 	private session: Session | null = null;
 	private model: string;
+	private currentUserTurnText: string = '';
+	private currentUserTranscript: string = '';
+	private currentModelTranscript: string = '';
+	private currentThoughtsText: string = '';
+	private currentModelAudioChunks: Array<{ data: string; mimeType: string }> = [];
 
 	constructor() {
 		super();
@@ -17,33 +22,47 @@ export default class GeminiLiveClient extends EventEmitter {
 	public async connect(): Promise<void> {
 		this.disconnect();
 
-		this.session = await this.client.live.connect({
-			model: this.model,
-			config: {
-				responseModalities: [Modality.AUDIO],
-				inputAudioTranscription: {},
-				outputAudioTranscription: {},
-				proactivity: { proactiveAudio: true },
-				enableAffectiveDialog: true
-			},
-			callbacks: {
-				onopen: () => {
-					console.log('Connected to Gemini Live API');
-					this.emit('open');
+		try {
+			this.session = await this.client.live.connect({
+				model: this.model,
+				config: {
+					responseModalities: [Modality.AUDIO],
+					systemInstruction: 'You are a helpful audio assistant. Respond concisely.',
+					inputAudioTranscription: {},
+					outputAudioTranscription: {}
 				},
-				onmessage: (message: LiveServerMessage) => {
-					this.handleMessage(message);
-				},
-				onclose: (event) => {
-					console.log('Disconnected from Gemini Live API');
-					this.emit('close', event);
-				},
-				onerror: (error) => {
-					console.error('Gemini Live API Error:', error);
-					this.emit('error', error);
+				callbacks: {
+					onopen: async () => {
+						console.log('Connected to Gemini Live API');
+						this.emit('open');
+						// Send initial message to establish the connection
+						try {
+							await this.session?.sendRealtimeInput({
+								text: 'Hello, I am ready to listen.'
+							});
+							console.log('Sent initial connection message');
+						} catch (e) {
+							console.error('Failed to send initial message:', e);
+						};
+					},
+					onmessage: (message: LiveServerMessage) => {
+						this.handleMessage(message);
+					},
+					onclose: (event) => {
+						console.log('Disconnected from Gemini Live API');
+						this.emit('close', event);
+					},
+					onerror: (error) => {
+						console.error('Gemini Live API Error:', error);
+						this.emit('error', error);
+					}
 				}
-			}
-		});
+			});
+		} catch (error) {
+			console.error('Error connecting to Gemini Live API:', error);
+			this.emit('error', error);
+			throw error;
+		};
 	};
 
 	public disconnect(): void {
@@ -80,6 +99,8 @@ export default class GeminiLiveClient extends EventEmitter {
 
 	public async sendText(text: string): Promise<void> {
 		if (!this.session) return;
+		this.currentUserTurnText = text;
+		this.emit('userText', text);
 		try {
 			await this.session.sendRealtimeInput({ text });
 		} catch (error) {
@@ -92,21 +113,58 @@ export default class GeminiLiveClient extends EventEmitter {
 		const { serverContent, toolCall } = message;
 
 		if (serverContent) {
-			if (serverContent.interrupted)
-				this.emit('interrupted');
+			// Capture input transcription (user)
+			if (serverContent.inputTranscription?.text) {
+				console.log(serverContent.inputTranscription.text);
+				this.currentUserTranscript += serverContent.inputTranscription.text;
+				this.emit('userTranscript', serverContent.inputTranscription.text);
+			};
 
-			if (serverContent.turnComplete)
-				this.emit('turnComplete');
+			// Capture output transcription (model)
+			if (serverContent.outputTranscription?.text) {
+				console.log(serverContent.outputTranscription.text);
+				this.currentModelTranscript += serverContent.outputTranscription.text;
+				this.emit('modelTranscript', serverContent.outputTranscription.text);
+			};
+
+			if (serverContent.interrupted) {
+				this.currentThoughtsText = '';
+				this.emit('interrupted');
+			};
 
 			if (serverContent.modelTurn) {
 				const parts = serverContent.modelTurn.parts;
-				if (parts)
+				if (parts) {
 					for (const part of parts) {
-						if (part.text)
-							this.emit('text', part.text);
-						if (part.inlineData)
+						if (part.text) {
+							this.currentThoughtsText += part.text;
+							this.emit('thoughts', part.text);
+						};
+						if (part.inlineData && part.inlineData.data && part.inlineData.mimeType) {
+							this.currentModelAudioChunks.push({
+								data: part.inlineData.data,
+								mimeType: part.inlineData.mimeType
+							});
 							this.emit('audio', part.inlineData.data, part.inlineData.mimeType);
+						};
 					};
+				};
+			};
+
+			if (serverContent.turnComplete) {
+				this.emit('turnComplete', {
+					userText: this.currentUserTurnText,
+					userTranscript: this.currentUserTranscript,
+					modelTranscript: this.currentModelTranscript,
+					thoughtsText: this.currentThoughtsText,
+					modelAudio: this.currentModelAudioChunks
+				});
+				// Reset for next turn
+				this.currentUserTurnText = '';
+				this.currentUserTranscript = '';
+				this.currentModelTranscript = '';
+				this.currentThoughtsText = '';
+				this.currentModelAudioChunks = [];
 			};
 		} else if (toolCall)
 			this.emit('toolCall', toolCall);

@@ -5,5 +5,4 @@ dist/
 .env
 .env.local
 tmp/
-db/*
-!db/schema.sql
+data/*.db*

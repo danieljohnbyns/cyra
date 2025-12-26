@@ -10,6 +10,7 @@ console.log(`Connecting to ws://localhost:${port}...`);
 
 let micInstance: ReturnType<typeof mic> | null = null;
 let speakerInstance: Speaker | null = null;
+let sessionId: string | null = null;
 
 ws.on('open', () => {
 	console.log('Connected to server');
@@ -18,17 +19,28 @@ ws.on('open', () => {
 ws.on('message', (data: WebSocket.Data) => {
 	try {
 		const message = JSON.parse(data.toString());
+		console.log('Received message type:', message.type);
 		if (message.type === 'setup_complete') {
+			sessionId = message.sessionId;
 			console.log('Server is ready (Gemini connected)');
+			console.log(`Session ID: ${sessionId}`);
 			startAudio();
 		} else if (message.type === 'audio')
 			playAudio(message.data);
-		else if (message.type === 'text')
-			console.log('Gemini:', message.text);
+		else if (message.type === 'userTranscript')
+			console.log('You:', message.text);
+		else if (message.type === 'modelTranscript')
+			console.log('Gemini (spoken):', message.text);
+		else if (message.type === 'thoughts')
+			console.log('Gemini (thoughts):', message.text);
+		else if (message.type === 'userText')
+			console.log('You:', message.text);
 		else if (message.type === 'interrupted')
 			console.log('Interrupted');
 		else if (message.type === 'turnComplete')
-			console.log('Turn complete');
+			console.log(`Turn ${message.turnNumber} complete`);
+		else if (message.type === 'error')
+			console.error('Server error:', message.message);
 	} catch (error) {
 		console.error('Error processing message:', error);
 	};
@@ -64,11 +76,17 @@ const startAudio = () => {
 	});
 
 	micInputStream.on('error', (err: Error) => {
-		console.error('Error in Input Stream: ' + err);
+		console.error('Error in Microphone Stream:', err.message);
+		stopAudio();
 	});
 
-	micInstance.start();
-	console.log('Microphone started');
+	try {
+		micInstance.start();
+		console.log('Microphone started');
+	} catch (err) {
+		console.error('Failed to start microphone:', err instanceof Error ? err.message : String(err));
+		// Continue anyway - some systems don't have mic hardware
+	};
 
 	// Setup Speaker
 	speakerInstance = new Speaker({
