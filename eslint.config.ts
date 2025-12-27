@@ -302,7 +302,8 @@ const unnecesaryCurlyRule: any = {
 			'ForInStatement:exit': checkSingleStatement,
 			'ForOfStatement:exit': checkSingleStatement,
 			'WhileStatement:exit': checkSingleStatement,
-			'DoWhileStatement:exit': checkSingleStatement
+			'DoWhileStatement:exit': checkSingleStatement,
+			'ElseStatement:exit': checkSingleStatement
 		};
 	}
 };
