@@ -1,7 +1,21 @@
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+import type { LiveServerToolCall } from '@google/genai';
 import { Session } from '@google/genai';
 import { EventEmitter } from 'events';
 import { config } from '../config.ts';
+
+interface AudioChunk {
+	data: string;
+	mimeType: string;
+};
+
+interface TurnCompleteData {
+	userText: string;
+	userTranscript: string;
+	modelTranscript: string;
+	thoughtsText: string;
+	modelAudio: AudioChunk[];
+};
 
 export default class GeminiLiveClient extends EventEmitter {
 	private client: GoogleGenAI;
@@ -11,7 +25,58 @@ export default class GeminiLiveClient extends EventEmitter {
 	private currentUserTranscript: string = '';
 	private currentModelTranscript: string = '';
 	private currentThoughtsText: string = '';
-	private currentModelAudioChunks: Array<{ data: string; mimeType: string }> = [];
+	private currentModelAudioChunks: AudioChunk[] = [];
+
+	// Type-safe overloads for emit
+	emit(event: 'open'): boolean;
+	emit(event: 'close', data: CloseEvent): boolean;
+	emit(event: 'error', error: Error | unknown): boolean;
+	emit(event: 'userText', text: string): boolean;
+	emit(event: 'userTranscript', text: string): boolean;
+	emit(event: 'modelTranscript', text: string): boolean;
+	emit(event: 'interrupted'): boolean;
+	emit(event: 'thoughts', text: string): boolean;
+	emit(event: 'audio', data: string, mimeType: string): boolean;
+	emit(event: 'turnComplete', data: TurnCompleteData): boolean;
+	emit(event: 'toolCall', toolCall: LiveServerToolCall): boolean;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	emit(event: string | symbol, ...args: any[]): boolean {
+		return super.emit(event, ...args);
+	};
+
+	// Type-safe overloads for on
+	on(event: 'open', listener: () => void): this;
+	on(event: 'close', listener: (event: CloseEvent) => void): this;
+	on(event: 'error', listener: (error: Error | unknown) => void): this;
+	on(event: 'userText', listener: (text: string) => void): this;
+	on(event: 'userTranscript', listener: (text: string) => void): this;
+	on(event: 'modelTranscript', listener: (text: string) => void): this;
+	on(event: 'interrupted', listener: () => void): this;
+	on(event: 'thoughts', listener: (text: string) => void): this;
+	on(event: 'audio', listener: (data: string, mimeType: string) => void): this;
+	on(event: 'turnComplete', listener: (data: TurnCompleteData) => void): this;
+	on(event: 'toolCall', listener: (toolCall: LiveServerToolCall) => void): this;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	on(event: string | symbol, listener: (...args: any[]) => void): this {
+		return super.on(event, listener);
+	};
+
+	// Type-safe overloads for once
+	once(event: 'open', listener: () => void): this;
+	once(event: 'close', listener: (event: CloseEvent) => void): this;
+	once(event: 'error', listener: (error: Error | unknown) => void): this;
+	once(event: 'userText', listener: (text: string) => void): this;
+	once(event: 'userTranscript', listener: (text: string) => void): this;
+	once(event: 'modelTranscript', listener: (text: string) => void): this;
+	once(event: 'interrupted', listener: () => void): this;
+	once(event: 'thoughts', listener: (text: string) => void): this;
+	once(event: 'audio', listener: (data: string, mimeType: string) => void): this;
+	once(event: 'turnComplete', listener: (data: TurnCompleteData) => void): this;
+	once(event: 'toolCall', listener: (toolCall: LiveServerToolCall) => void): this;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	once(event: string | symbol, listener: (...args: any[]) => void): this {
+		return super.once(event, listener);
+	};
 
 	constructor() {
 		super();
