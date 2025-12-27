@@ -97,18 +97,6 @@ export class Server {
 				ws.send(JSON.stringify({ type: 'userText', text }));
 		});
 
-		geminiClient.on('toolResult', (data: any) => {
-			console.log(`Tool executed: ${data.name}`, data.result);
-			if (ws.readyState === WebSocket.OPEN)
-				ws.send(JSON.stringify({ type: 'toolResult', name: data.name, result: data.result }));
-		});
-
-		geminiClient.on('toolError', (data: any) => {
-			console.error(`Tool error: ${data.name}`, data.error);
-			if (ws.readyState === WebSocket.OPEN)
-				ws.send(JSON.stringify({ type: 'toolError', name: data.name, error: data.error }));
-		});
-
 		geminiClient.on('interrupted', () => {
 			if (ws.readyState === WebSocket.OPEN)
 				ws.send(JSON.stringify({ type: 'interrupted' }));
