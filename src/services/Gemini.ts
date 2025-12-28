@@ -6,6 +6,7 @@ import { Session } from '@google/genai';
 import { EventEmitter } from 'events';
 import { config } from '../config/index.ts';
 import MCPClient from './MCPClient.ts';
+import { logger } from '../utils/logger.ts';
 
 interface AudioChunk {
 	data: string;
@@ -115,7 +116,7 @@ export default class GeminiLiveClient extends EventEmitter {
 				},
 				callbacks: {
 					onopen: async () => {
-						console.log('Connected to Gemini Live API');
+						logger.success('Connected to Gemini Live API');
 						this.emit('open');
 						// Send initial message to establish the connection
 						setTimeout(async () => {
@@ -129,17 +130,17 @@ export default class GeminiLiveClient extends EventEmitter {
 						await this.handleMessage(message);
 					},
 					onclose: (event) => {
-						console.log('Disconnected from Gemini Live API');
+						logger.log('Disconnected from Gemini Live API');
 						this.emit('close', event);
 					},
 					onerror: (error) => {
-						console.error('Gemini Live API Error:', error);
+						logger.error('Gemini Live API Error:', error);
 						this.emit('error', error);
 					}
 				}
 			});
 		} catch (error) {
-			console.error('Error connecting to Gemini Live API:', error);
+			logger.error('Error connecting to Gemini Live API:', error);
 			this.emit('error', error);
 			throw error;
 		};
@@ -151,7 +152,7 @@ export default class GeminiLiveClient extends EventEmitter {
 				try {
 					this.session.conn.close();
 				} catch (e) {
-					console.error('Error closing connection:', e);
+					logger.error('Error closing connection:', e);
 				};
 			this.session = null;
 		};
@@ -159,7 +160,7 @@ export default class GeminiLiveClient extends EventEmitter {
 
 	public async sendAudioChunk(base64Audio: string, mimeType: string = 'audio/pcm;rate=16000'): Promise<void> {
 		if (!this.session) {
-			console.warn('Session not open, cannot send audio');
+			logger.warn('Session not open, cannot send audio');
 			return;
 		};
 
@@ -171,7 +172,7 @@ export default class GeminiLiveClient extends EventEmitter {
 				}
 			});
 		} catch (error) {
-			console.error('Error sending audio:', error);
+			logger.error('Error sending audio:', error);
 			this.emit('error', error);
 		};
 	};
@@ -183,7 +184,7 @@ export default class GeminiLiveClient extends EventEmitter {
 		try {
 			await this.session.sendRealtimeInput({ text });
 		} catch (error) {
-			console.error('Error sending text:', error);
+			logger.error('Error sending text:', error);
 			this.emit('error', error);
 		};
 	};
@@ -192,15 +193,16 @@ export default class GeminiLiveClient extends EventEmitter {
 		const { name, id, args } = toolCall;
 
 		if (!name) {
-			console.error('Tool call missing name');
+			logger.error('Tool call missing name');
 			return;
 		};
 
-		console.log(`Handling tool call: ${name} (ID: ${id}) with args:`, args);
+		logger.info(`Handling tool call: ${name} (ID: ${id}) with args:`, args);
 
 		try {
 			const result = await this.mcpClient.executeTool(name, args);
-			console.log(`Tool executed: ${name} (ID: ${id}) with result:`, result);
+			logger.success(`Tool executed: ${name} (ID: ${id})`);
+			logger.log('Result:', result);
 			this.emit('toolResult', { id, name, result });
 
 			// Send tool response back to Gemini
@@ -214,7 +216,7 @@ export default class GeminiLiveClient extends EventEmitter {
 				});
 		} catch (error) {
 			const errorMessage = (error as Error).message || String(error);
-			console.error(`Error executing tool ${name} (ID: ${id}):`, error);
+			logger.error(`Error executing tool ${name} (ID: ${id}):`, error);
 			this.emit('toolError', { id, name, error: errorMessage });
 
 			// Send error response back to Gemini
@@ -235,14 +237,14 @@ export default class GeminiLiveClient extends EventEmitter {
 		if (serverContent) {
 			// Capture input transcription (user)
 			if (serverContent.inputTranscription?.text) {
-				console.log(serverContent.inputTranscription.text);
+				process.stdout.write(serverContent.inputTranscription.text);
 				this.currentUserTranscript += serverContent.inputTranscription.text;
 				this.emit('userTranscript', serverContent.inputTranscription.text);
 			};
 
 			// Capture output transcription (model)
 			if (serverContent.outputTranscription?.text) {
-				console.log(serverContent.outputTranscription.text);
+				process.stdout.write(serverContent.outputTranscription.text);
 				this.currentModelTranscript += serverContent.outputTranscription.text;
 				this.emit('modelTranscript', serverContent.outputTranscription.text);
 			};
@@ -272,6 +274,7 @@ export default class GeminiLiveClient extends EventEmitter {
 			};
 
 			if (serverContent.turnComplete) {
+				process.stdout.write('\n\n');
 				this.emit('turnComplete', {
 					userText: this.currentUserTurnText,
 					userTranscript: this.currentUserTranscript,

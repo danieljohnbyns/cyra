@@ -1,8 +1,9 @@
 import { spawn } from 'child_process';
 import { config } from './config/index.ts';
 import { Server } from './services/Server.ts';
+import { logger } from './utils/logger.ts';
 
-console.log('App Configuration:', config);
+logger.log('App Configuration:', config);
 
 /**
  * Check if dependencies are already installed
@@ -16,10 +17,10 @@ const checkDependencies = (checkCommand: string, serverName: string): Promise<bo
 
 		childProcess.on('close', (code: number) => {
 			if (code === 0) {
-				console.log(`✓ Dependencies already installed for ${serverName}`);
+				logger.success(`Dependencies already installed for ${serverName}`);
 				resolve(true);
 			} else {
-				console.log(`ℹ Dependencies not yet installed for ${serverName}, will run setup`);
+				logger.info(`Dependencies not yet installed for ${serverName}, will run setup`);
 				resolve(false);
 			};
 		});
@@ -41,7 +42,7 @@ const runSetupScripts = async (): Promise<void> => {
 	if (serversWithDeps.length === 0)
 		return;
 
-	console.log(`Checking dependencies for ${serversWithDeps.length} server(s)...`);
+	logger.log(`Checking dependencies for ${serversWithDeps.length} server(s)...`);
 
 	for (const serverConfig of serversWithDeps) {
 		const { setup, check } = serverConfig.dependencies!;
@@ -62,7 +63,7 @@ const runSetupScripts = async (): Promise<void> => {
  */
 const runSetupScript = (script: string, serverName: string): Promise<void> => {
 	return new Promise((resolve) => {
-		console.log(`Running setup script for ${serverName}: ${script}`);
+		logger.log(`Running setup script for ${serverName}: ${script}`);
 
 		const childProcess = spawn('sh', ['-c', script], {
 			stdio: ['pipe', 'pipe', 'pipe'],
@@ -82,19 +83,19 @@ const runSetupScript = (script: string, serverName: string): Promise<void> => {
 
 		childProcess.on('close', (code: number) => {
 			if (code === 0) {
-				console.log(`✓ Setup script for ${serverName} completed successfully`);
+				logger.success(`Setup script for ${serverName} completed successfully`);
 				if (stdout.trim())
-					console.log(`  Output: ${stdout.trim()}`);
+					logger.log(`  Output: ${stdout.trim()}`);
 			} else {
-				console.warn(`⚠ Setup script for ${serverName} exited with code ${code}`);
+				logger.warn(`Setup script for ${serverName} exited with code ${code}`);
 				if (stderr.trim())
-					console.warn(`  Errors: ${stderr.trim()}`);
+					logger.warn(`  Errors: ${stderr.trim()}`);
 			};
 			resolve();
 		});
 
 		childProcess.on('error', (error: Error) => {
-			console.warn(`⚠ Setup script for ${serverName} failed to run: ${error.message}`);
+			logger.warn(`Setup script for ${serverName} failed to run: ${error.message}`);
 			resolve();
 		});
 	});
@@ -109,11 +110,11 @@ try {
 
 	// Handle process exit
 	process.on('SIGINT', () => {
-		console.log('Stopping...');
+		logger.log('Stopping...');
 		server.close();
 		process.exit(0);
 	});
 } catch (error) {
-	console.error('Failed to initialize application:', error);
+	logger.error('Failed to initialize application:', error);
 	process.exit(1);
 };

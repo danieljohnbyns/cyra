@@ -4,6 +4,7 @@ import { config } from '../config/index.ts';
 import Gemini from './Gemini.ts';
 import MCPClient from './MCPClient.ts';
 import { initializeDatabase, SessionManager, MessageStore } from './Database.ts';
+import { logger } from '../utils/logger.ts';
 
 export class Server {
 	private wss: WebSocketServer;
@@ -18,10 +19,10 @@ export class Server {
 		this.mcpClient = new MCPClient(config.mcp);
 
 		this.wss = new WebSocketServer({ port: config.system.port });
-		console.log(`WebSocket server started on port ${config.system.port}`);
+		logger.success(`WebSocket server started on port ${config.system.port}`);
 
 		this.wss.on('connection', (ws: WebSocket, req) => {
-			console.log('New client connected');
+			logger.log('New client connected');
 			this.handleConnection(ws, req);
 		});
 
@@ -33,7 +34,7 @@ export class Server {
 		try {
 			await this.mcpClient.initialize();
 		} catch (error) {
-			console.error('Failed to initialize MCP:', error);
+			logger.error('Failed to initialize MCP:', error);
 		};
 	};
 
@@ -54,10 +55,10 @@ export class Server {
 			: null;
 
 		if (session)
-			console.log(`Resuming existing session: ${session.id}`);
+			logger.log(`Resuming existing session: ${session.id}`);
 		else {
 			session = this.sessionManager.createSession();
-			console.log(`Session created: ${session.id}`);
+			logger.log(`Session created: ${session.id}`);
 		};
 
 		let currentTurnNumber = session.turn_count;
@@ -82,7 +83,7 @@ export class Server {
 				if (msg) this.processClientMessage(msg, geminiClient);
 			};
 		}).catch((error: Error) => {
-			console.error('Failed to connect to Gemini:', error);
+			logger.error('Failed to connect to Gemini:', error);
 			ws.close(1011, 'Failed to connect to Gemini');
 		});
 
@@ -118,13 +119,14 @@ export class Server {
 		});
 
 		geminiClient.on('toolResult', (data: any) => {
-			console.log(`Tool executed: ${data.name}`, data.result);
+			logger.success(`Tool executed: ${data.name}`);
+			logger.log('Result:', data.result);
 			if (ws.readyState === WebSocket.OPEN)
 				ws.send(JSON.stringify({ type: 'toolResult', name: data.name, result: data.result }));
 		});
 
 		geminiClient.on('toolError', (data: any) => {
-			console.error(`Tool error: ${data.name}`, data.error);
+			logger.error(`Tool error: ${data.name}`, data.error);
 			if (ws.readyState === WebSocket.OPEN)
 				ws.send(JSON.stringify({ type: 'toolError', name: data.name, error: data.error }));
 		});
@@ -136,7 +138,7 @@ export class Server {
 
 		geminiClient.on('turnComplete', (turnData: any) => {
 			currentTurnNumber++;
-			console.log(`Turn ${currentTurnNumber} completed`);
+			logger.success(`Turn ${currentTurnNumber} completed`);
 
 			// Store messages in database
 			if (turnData.userTranscript)
@@ -150,13 +152,13 @@ export class Server {
 		});
 
 		geminiClient.on('error', (error: any) => {
-			console.error('Gemini client error:', error);
+			logger.error('Gemini client error:', error);
 			if (ws.readyState === WebSocket.OPEN)
 				ws.send(JSON.stringify({ type: 'error', message: 'Gemini API error' }));
 		});
 
 		geminiClient.on('close', () => {
-			console.log('Gemini connection closed');
+			logger.log('Gemini connection closed');
 			if (ws.readyState === WebSocket.OPEN)
 				ws.close();
 		});
@@ -165,7 +167,7 @@ export class Server {
 		ws.on('message', (data) => {
 			const message = data.toString();
 			if (!isGeminiReady) {
-				console.log('Buffering message until Gemini is ready');
+				logger.warn('Buffering message until Gemini is ready');
 				messageQueue.push(message);
 			} else {
 				this.processClientMessage(message, geminiClient);
@@ -173,12 +175,12 @@ export class Server {
 		});
 
 		ws.on('close', () => {
-			console.log('Client disconnected');
+			logger.log('Client disconnected');
 			geminiClient.disconnect();
 		});
 
 		ws.on('error', (error) => {
-			console.error('WebSocket error:', error);
+			logger.error('WebSocket error:', error);
 			geminiClient.disconnect();
 		});
 	};
@@ -192,7 +194,7 @@ export class Server {
 			else if (parsed.type === 'text' && parsed.text)
 				geminiClient.sendText(parsed.text);
 		} catch (error) {
-			console.error('Error parsing message from client:', error);
+			logger.error('Error parsing message from client:', error);
 		};
 	};
 };
