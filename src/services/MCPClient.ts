@@ -190,7 +190,7 @@ export class MCPClient extends EventEmitter {
 				instance.pendingRequests = new Map();
 
 			// Longer timeout for tool execution (especially long-running operations)
-			const timeoutMs = method === 'tools/call' ? 30000 : 5000;
+			const timeoutMs = method === 'tools/call' ? 30000 : 10000;
 			const timeout = setTimeout(() => {
 				instance.pendingRequests?.delete(id);
 				reject(new Error(`Request timeout for method ${method}`));
