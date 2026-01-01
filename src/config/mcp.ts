@@ -40,7 +40,7 @@ export const defaultMCPConfig: MCPConfig = {
 			args: [
 				'-y',
 				'@modelcontextprotocol/server-filesystem@latest',
-				'/home/danieljohn/Desktop/cyra'
+				process.cwd() || '.'
 			]
 		},
 		{
