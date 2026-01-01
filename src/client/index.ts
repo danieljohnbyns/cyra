@@ -13,7 +13,6 @@ console.log(`Connecting to ws://localhost:${port}...`);
 
 let micInstance: ReturnType<typeof mic> | null = null;
 let speakerInstance: Speaker | null = null;
-let sessionId: string | null = null;
 
 ws.on('open', () => {
 	console.log('Connected to server');
@@ -23,9 +22,7 @@ ws.on('message', (data: WebSocket.Data) => {
 	try {
 		const message = JSON.parse(data.toString());
 		if (message.type === 'setup_complete') {
-			sessionId = message.sessionId;
 			console.log('Server is ready (Gemini connected)');
-			console.log(`Session ID: ${sessionId}`);
 			startAudio();
 		} else if (message.type === 'audio')
 			playAudio(message.data);

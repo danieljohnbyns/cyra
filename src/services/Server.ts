@@ -3,27 +3,21 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { config } from '../config/index.ts';
 import Gemini from './Gemini.ts';
 import MCPClient from './MCPClient.ts';
-import { initializeDatabase, SessionManager, MessageStore } from './Database.ts';
 import { logger } from '../utils/logger.ts';
 
 export class Server {
 	private wss: WebSocketServer;
-	private sessionManager: SessionManager;
-	private messageStore: MessageStore;
 	private mcpClient: MCPClient;
 
 	constructor() {
-		initializeDatabase();
-		this.sessionManager = new SessionManager();
-		this.messageStore = new MessageStore();
 		this.mcpClient = new MCPClient(config.mcp);
 
 		this.wss = new WebSocketServer({ port: config.system.port });
 		logger.hierarchy.report('success', 'WebSocket server ready', [`Port: ${config.system.port}`]);
 
-		this.wss.on('connection', (ws: WebSocket, req) => {
+		this.wss.on('connection', (ws: WebSocket) => {
 			logger.info('New client connected');
-			this.handleConnection(ws, req);
+			this.handleConnection(ws);
 		});
 
 		// Initialize MCP servers
@@ -43,38 +37,20 @@ export class Server {
 		this.wss.close();
 	};
 
-	private handleConnection(ws: WebSocket, req: any): void {
+	private handleConnection(ws: WebSocket): void {
 		const geminiClient = new Gemini(this.mcpClient);
 		let isGeminiReady = false;
 		const messageQueue: string[] = [];
-
-		// Extract session ID from headers or create new session
-		const requestedSessionId = req.headers['x-session-id'] as string;
-		let session = requestedSessionId
-			? this.sessionManager.getSession(requestedSessionId)
-			: null;
-
-		if (session)
-			logger.info(`Resuming existing session: ${session.id}`);
-		else {
-			session = this.sessionManager.createSession();
-			logger.info(`Session created: ${session.id}`);
-		};
-
-		let currentTurnNumber = session.turn_count;
 
 		// Connect to Gemini
 		geminiClient.connect().then(() => {
 			isGeminiReady = true;
 			logger.hierarchy.report('success', 'Gemini connection established');
 
-			// Send setup_complete to client with session info
+			// Send setup_complete to client
 			if (ws.readyState === WebSocket.OPEN)
 				ws.send(JSON.stringify({
-					type: 'setup_complete',
-					sessionId: session!.id,
-					isNewSession: !requestedSessionId,
-					resumedTurn: currentTurnNumber
+					type: 'setup_complete'
 				}));
 
 			// Process queued messages
@@ -135,19 +111,11 @@ export class Server {
 				ws.send(JSON.stringify({ type: 'interrupted' }));
 		});
 
-		geminiClient.on('turnComplete', (turnData: any) => {
-			currentTurnNumber++;
-			logger.hierarchy.report('success', `Turn ${currentTurnNumber} completed`);
-
-			// Store messages in database
-			if (turnData.userTranscript)
-				this.messageStore.addMessage(session!.id, currentTurnNumber, 'user', turnData.userTranscript);
-			if (turnData.modelTranscript)
-				this.messageStore.addMessage(session!.id, currentTurnNumber, 'model', turnData.modelTranscript);
-			this.messageStore.addMessage(session!.id, currentTurnNumber, 'thoughts', turnData.thoughtsText);
+		geminiClient.on('turnComplete', () => {
+			logger.hierarchy.report('success', 'Turn completed');
 
 			if (ws.readyState === WebSocket.OPEN)
-				ws.send(JSON.stringify({ type: 'turnComplete', turnNumber: currentTurnNumber }));
+				ws.send(JSON.stringify({ type: 'turnComplete' }));
 		});
 
 		geminiClient.on('error', (error: any) => {
