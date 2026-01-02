@@ -132,14 +132,24 @@ export default class GeminiLiveClient extends EventEmitter {
 						}, 100);
 					},
 					onmessage: async (message: LiveServerMessage) => {
-						await this.handleMessage(message);
+						try {
+							await this.handleMessage(message);
+						} catch (error) {
+							logger.hierarchy.report('error', 'CRITICAL: Error handling message', [
+								error instanceof Error ? error.message : String(error)
+							]);
+							console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack');
+						};
 					},
 					onclose: (event) => {
-						logger.hierarchy.report('success', 'Disconnected from Gemini Live API');
+						logger.hierarchy.report('success', 'Disconnected from Gemini Live API', ['Event code: ' + event.code, 'Reason: ' + event.reason]);
 						this.emit('close', event);
 					},
 					onerror: (error) => {
 						logger.hierarchy.report('error', 'Gemini Live API Error', [String(error)]);
+						if (error instanceof Error)
+							console.error('Error stack:', error.stack);
+
 						this.emit('error', error);
 					}
 				}
@@ -152,14 +162,20 @@ export default class GeminiLiveClient extends EventEmitter {
 	};
 
 	public disconnect(): void {
+		logger.info('Calling disconnect on Gemini client');
 		if (this.session) {
-			if (this.session.conn)
+			logger.info('Session exists, attempting to close connection');
+			if (this.session.conn) {
 				try {
 					this.session.conn.close();
-				} catch {
-					logger.warn('Error closing connection');
+					logger.info('Connection closed successfully');
+				} catch (error) {
+					logger.warn('Error closing connection:', error instanceof Error ? error.message : String(error));
 				};
+			};
 			this.session = null;
+		} else {
+			logger.info('No session to disconnect');
 		};
 	};
 
@@ -205,12 +221,18 @@ export default class GeminiLiveClient extends EventEmitter {
 		logger.hierarchy.section('Handling tool call', [`Name: ${name}`, `ID: ${id}`], `Args: ${JSON.stringify(args)}`);
 
 		try {
+			logger.info(`Executing tool: ${name}`);
 			const result = await this.mcpClient.executeTool(name, args);
 			logger.hierarchy.report('success', `Tool executed: ${name} (ID: ${id})`, [], JSON.stringify(result));
 			this.emit('toolResult', { id, name, result });
 
 			// Send tool response back to Gemini
-			if (this.session)
+			logger.info(`Sending tool response for ${name} (ID: ${id})`);
+			try {
+				if (!this.session) {
+					logger.error(`Session not available when sending tool response for ${name}`);
+					return;
+				};
 				await this.session.sendToolResponse({
 					functionResponses: {
 						id,
@@ -218,13 +240,28 @@ export default class GeminiLiveClient extends EventEmitter {
 						response: { output: result }
 					}
 				});
+				logger.info(`Tool response sent successfully for ${name} (ID: ${id})`);
+				// Give Gemini a moment to process the response
+				await new Promise(resolve => setTimeout(resolve, 100));
+			} catch (sendError) {
+				logger.hierarchy.report('error', `Failed to send tool response for ${name}`, [
+					sendError instanceof Error ? sendError.message : String(sendError)
+				]);
+				console.error('Send error details:', sendError);
+			};
 		} catch (error) {
 			const errorMessage = (error as Error).message || String(error);
 			logger.hierarchy.report('error', `Error executing tool ${name} (ID: ${id})`, [errorMessage]);
+			console.error('Tool execution error:', error);
 			this.emit('toolError', { id, name, error: errorMessage });
 
 			// Send error response back to Gemini
-			if (this.session)
+			logger.info(`Sending error response for tool ${name} (ID: ${id})`);
+			try {
+				if (!this.session) {
+					logger.error(`Session not available when sending error response for ${name}`);
+					return;
+				};
 				await this.session.sendToolResponse({
 					functionResponses: {
 						id,
@@ -232,74 +269,97 @@ export default class GeminiLiveClient extends EventEmitter {
 						response: { error: errorMessage }
 					}
 				});
+				logger.info(`Error response sent successfully for ${name} (ID: ${id})`);
+				// Give Gemini a moment to process the error response
+				await new Promise(resolve => setTimeout(resolve, 100));
+			} catch (sendError) {
+				logger.hierarchy.report('error', `Failed to send error response for ${name}`, [
+					sendError instanceof Error ? sendError.message : String(sendError)
+				]);
+				console.error('Send error details:', sendError);
+			};
 		};
 	};
 
 	private async handleMessage(message: LiveServerMessage): Promise<void> {
-		const { serverContent } = message;
+		try {
+			const { serverContent } = message;
 
-		if (serverContent) {
-			// Capture input transcription (user)
-			if (serverContent.inputTranscription?.text) {
-				process.stdout.write(serverContent.inputTranscription.text);
-				this.currentUserTranscript += serverContent.inputTranscription.text;
-				this.emit('userTranscript', serverContent.inputTranscription.text);
-			};
+			if (serverContent) {
+				// Capture input transcription (user)
+				if (serverContent.inputTranscription?.text) {
+					process.stdout.write(serverContent.inputTranscription.text);
+					this.currentUserTranscript += serverContent.inputTranscription.text;
+					this.emit('userTranscript', serverContent.inputTranscription.text);
+				};
 
-			// Capture output transcription (model)
-			if (serverContent.outputTranscription?.text) {
-				process.stdout.write(serverContent.outputTranscription.text);
-				this.currentModelTranscript += serverContent.outputTranscription.text;
-				this.emit('modelTranscript', serverContent.outputTranscription.text);
-			};
+				// Capture output transcription (model)
+				if (serverContent.outputTranscription?.text) {
+					process.stdout.write(serverContent.outputTranscription.text);
+					this.currentModelTranscript += serverContent.outputTranscription.text;
+					this.emit('modelTranscript', serverContent.outputTranscription.text);
+				};
 
-			if (serverContent.interrupted) {
-				this.currentThoughtsText = '';
-				this.emit('interrupted');
-			};
+				if (serverContent.interrupted) {
+					this.currentThoughtsText = '';
+					this.emit('interrupted');
+				};
 
-			if (serverContent.modelTurn) {
-				const parts = serverContent.modelTurn.parts;
-				if (parts) {
-					for (const part of parts) {
-						if (part.text) {
-							this.currentThoughtsText += part.text;
-							this.emit('thoughts', part.text);
-						};
-						if (part.inlineData && part.inlineData.data && part.inlineData.mimeType) {
-							this.currentModelAudioChunks.push({
-								data: part.inlineData.data,
-								mimeType: part.inlineData.mimeType
-							});
-							this.emit('audio', part.inlineData.data, part.inlineData.mimeType);
+				if (serverContent.modelTurn) {
+					const parts = serverContent.modelTurn.parts;
+					if (parts) {
+						for (const part of parts) {
+							if (part.text) {
+								this.currentThoughtsText += part.text;
+								this.emit('thoughts', part.text);
+							};
+							if (part.inlineData && part.inlineData.data && part.inlineData.mimeType) {
+								this.currentModelAudioChunks.push({
+									data: part.inlineData.data,
+									mimeType: part.inlineData.mimeType
+								});
+								this.emit('audio', part.inlineData.data, part.inlineData.mimeType);
+							};
 						};
 					};
 				};
-			};
 
-			if (serverContent.turnComplete) {
-				process.stdout.write('\n\n');
-				this.emit('turnComplete', {
-					userText: this.currentUserTurnText,
-					userTranscript: this.currentUserTranscript,
-					modelTranscript: this.currentModelTranscript,
-					thoughtsText: this.currentThoughtsText,
-					modelAudio: this.currentModelAudioChunks
-				});
-				// Reset for next turn
-				this.currentUserTurnText = '';
-				this.currentUserTranscript = '';
-				this.currentModelTranscript = '';
-				this.currentThoughtsText = '';
-				this.currentModelAudioChunks = [];
-			};
-		} else if (message.toolCall) {
-			// Handle MCP tool calls
-			if (message.toolCall.functionCalls)
-				for (const call of message.toolCall.functionCalls)
-					this.handleToolCall(call);
+				if (serverContent.turnComplete) {
+					process.stdout.write('\n\n');
+					this.emit('turnComplete', {
+						userText: this.currentUserTurnText,
+						userTranscript: this.currentUserTranscript,
+						modelTranscript: this.currentModelTranscript,
+						thoughtsText: this.currentThoughtsText,
+						modelAudio: this.currentModelAudioChunks
+					});
+					// Reset for next turn
+					this.currentUserTurnText = '';
+					this.currentUserTranscript = '';
+					this.currentModelTranscript = '';
+					this.currentThoughtsText = '';
+					this.currentModelAudioChunks = [];
+				};
+			} else if (message.toolCall) {
+				// Handle MCP tool calls
+				if (message.toolCall.functionCalls) {
+					for (const call of message.toolCall.functionCalls) {
+						try {
+							await this.handleToolCall(call);
+						} catch (toolError) {
+							logger.hierarchy.report('error', 'Unhandled error in tool call handler', [
+								toolError instanceof Error ? toolError.message : String(toolError)
+							]);
+						};
+					};
+				};
 
-			this.emit('toolCall', message.toolCall as ToolCall);
+				this.emit('toolCall', message.toolCall as ToolCall);
+			};
+		} catch (error) {
+			logger.hierarchy.report('error', 'Unhandled error in handleMessage', [
+				error instanceof Error ? error.message : String(error)
+			]);
 		};
 	};
 };

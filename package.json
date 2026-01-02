@@ -6,6 +6,7 @@
 	"scripts": {
 		"build": "tsc",
 		"dev": "nodemon --require ts-node/register src/index.ts --ignore tmp/**",
+		"dev:client": "nodemon --require ts-node/register src/client/index.ts --ignore tmp/**",
 		"start": "node --require ts-node/register src/index.ts",
 		"test:client": "node --require ts-node/register src/client/index.ts",
 		"lint": "eslint src/**/*.ts",

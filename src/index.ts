@@ -2,6 +2,13 @@ import { spawn } from 'child_process';
 import { config } from './config/index.ts';
 import { Server } from './services/Server.ts';
 import { logger } from './utils/logger.ts';
+import fs from 'fs';
+import path from 'path';
+
+// Ensure tmp directory exists
+const tmpDir = path.join(process.cwd(), 'tmp');
+if (!fs.existsSync(tmpDir))
+	fs.mkdirSync(tmpDir, { recursive: true });
 
 logger.hierarchy.details('App Configuration', {
 	mcp: config.mcp.enabled ? 'enabled' : 'disabled',

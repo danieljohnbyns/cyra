@@ -1,3 +1,5 @@
+import path from 'path';
+
 /**
  * MCP (Model Context Protocol) Server Configuration
  * Defines which MCP servers to connect to and how
@@ -47,7 +49,10 @@ export const defaultMCPConfig: MCPConfig = {
 			name: 'memory',
 			type: 'stdio',
 			command: 'npx',
-			args: ['-y', '@modelcontextprotocol/server-memory@latest']
+			args: ['-y', '@modelcontextprotocol/server-memory@latest'],
+			env: {
+				MEMORY_FILE_PATH: path.join(process.cwd(), 'tmp', 'mcp_memory.json')
+			}
 		},
 		{
 			name: 'thinking',
